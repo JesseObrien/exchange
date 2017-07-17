@@ -1,94 +1,100 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/jesseobrien/exchange/config"
+	"github.com/jesseobrien/exchange/routes"
 	"github.com/urfave/negroni"
 )
 
 func main() {
 
-	exchange := CreateExchange()
+	// @TODO make an init function to take flags to populate the config
+	cfg := config.New()
 
-	exchange.seed("TSLA")
+	cfg.Database = config.DatabaseInit(cfg)
+	defer cfg.Database.Close()
 
 	router := mux.NewRouter()
 
-	router.HandleFunc("/orders", func(w http.ResponseWriter, req *http.Request) {
+	routes.Companies(router, cfg)
 
-		o := NewOrder()
-
-		if req.Body == nil {
-			http.Error(w, "Please send a request body", 400)
-			return
-		}
-
-		err := json.NewDecoder(req.Body).Decode(&o)
-
-		if err != nil {
-			http.Error(w, err.Error(), 400)
-			return
-		}
-
-		err = o.Validate()
-
-		if err != nil {
-			http.Error(w, err.Error(), 400)
-			return
-		}
-
-		exchange.postOrder(o)
-
-		json.NewEncoder(w).Encode(o)
-	}).Methods("POST")
-
-	router.HandleFunc("/orders/{symbol}", func(w http.ResponseWriter, req *http.Request) {
-		vars := mux.Vars(req)
-		symbol := vars["symbol"]
-		orders, err := exchange.GetOrders(symbol)
-
-		if err != nil {
-			http.Error(w, err.Error(), 400)
-			return
-		}
-
-		json.NewEncoder(w).Encode(orders)
-
-	}).Methods("GET")
-
-	router.HandleFunc("/bids/{symbol}", func(w http.ResponseWriter, req *http.Request) {
-		vars := mux.Vars(req)
-		symbol := vars["symbol"]
-
-		bids, err := exchange.GetBids(symbol)
-
-		if err != nil {
-			http.Error(w, err.Error(), 400)
-			return
-		}
-
-		json.NewEncoder(w).Encode(bids)
-
-	}).Methods("GET")
-
-	router.HandleFunc("/ticker/{symbol}", func(w http.ResponseWriter, req *http.Request) {
-		vars := mux.Vars(req)
-		symbol := vars["symbol"]
-
-		ticker, err := exchange.ticker(symbol)
-
-		if err != nil {
-			http.Error(w, err.Error(), 400)
-			return
-		}
-
-		json.NewEncoder(w).Encode(ticker)
-	}).Methods("GET")
+	// router.HandleFunc("/orders", func(w http.ResponseWriter, req *http.Request) {
+	// 	w.Header().Set("Content-type", "application/json")
+	//
+	// 	o := NewOrder()
+	//
+	// 	if req.Body == nil {
+	// 		http.Error(w, "Please send a request body", 400)
+	// 		return
+	// 	}
+	//
+	// 	err := json.NewDecoder(req.Body).Decode(&o)
+	//
+	// 	if err != nil {
+	// 		http.Error(w, err.Error(), 400)
+	// 		return
+	// 	}
+	//
+	// 	err = o.Validate()
+	//
+	// 	if err != nil {
+	// 		http.Error(w, err.Error(), 400)
+	// 		return
+	// 	}
+	//
+	// 	exchange.postOrder(o)
+	//
+	// 	json.NewEncoder(w).Encode(o)
+	// }).Methods("POST")
+	//
+	// router.HandleFunc("/orders/{symbol}", func(w http.ResponseWriter, req *http.Request) {
+	// 	vars := mux.Vars(req)
+	// 	symbol := vars["symbol"]
+	// 	orders, err := exchange.GetOrders(symbol)
+	//
+	// 	if err != nil {
+	// 		http.Error(w, err.Error(), 400)
+	// 		return
+	// 	}
+	//
+	// 	json.NewEncoder(w).Encode(orders)
+	//
+	// }).Methods("GET")
+	//
+	// router.HandleFunc("/bids/{symbol}", func(w http.ResponseWriter, req *http.Request) {
+	// 	vars := mux.Vars(req)
+	// 	symbol := vars["symbol"]
+	//
+	// 	bids, err := exchange.GetBids(symbol)
+	//
+	// 	if err != nil {
+	// 		http.Error(w, err.Error(), 400)
+	// 		return
+	// 	}
+	//
+	// 	json.NewEncoder(w).Encode(bids)
+	//
+	// }).Methods("GET")
+	//
+	// router.HandleFunc("/ticker/{symbol}", func(w http.ResponseWriter, req *http.Request) {
+	// 	vars := mux.Vars(req)
+	// 	symbol := vars["symbol"]
+	//
+	// 	ticker, err := exchange.ticker(symbol)
+	//
+	// 	if err != nil {
+	// 		http.Error(w, err.Error(), 400)
+	// 		return
+	// 	}
+	//
+	// 	json.NewEncoder(w).Encode(ticker)
+	// }).Methods("GET")
 
 	n := negroni.Classic()
 	n.UseHandler(router)
 
-	http.ListenAndServe(":3000", n)
+	http.ListenAndServe(cfg.GetHttpHost(), n)
 }
